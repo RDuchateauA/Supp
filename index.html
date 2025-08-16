@@ -1,0 +1,450 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Inventario de Suplementos</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#ffffff">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <style>
+    :root { --pad: 12px; --radius: 12px; --bg:#f7f7fb; --card:#ffffff; --muted:#666; }
+    * { box-sizing: border-box; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+    body { margin: 0; background: var(--bg); color: #111; }
+    header { position: sticky; top: 0; background: var(--card); padding: 14px var(--pad); border-bottom: 1px solid #eee; display:flex; align-items:center; gap:8px; z-index:5; }
+    header h1 { font-size: 18px; margin: 0; flex:1; }
+    .container { padding: var(--pad); max-width: 900px; margin: 0 auto; }
+    .toolbar { display:flex; gap:8px; flex-wrap:wrap; }
+    button, input, select, textarea { font-size:16px; padding:10px 12px; border-radius:10px; border:1px solid #ddd; background:#fff; }
+    button.primary { background:#111; color:#fff; border-color:#111; }
+    .card { background: var(--card); border:1px solid #eee; border-radius: var(--radius); padding: var(--pad); margin: 10px 0; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; }
+    .row > * { flex:1; min-width: 160px; }
+    .muted { color: var(--muted); font-size: 12px; }
+    .pill { display:inline-block; padding:4px 8px; border-radius:999px; border:1px solid #eee; background:#fafafa; margin-right:6px; font-size:12px; }
+    .sup-row { display:flex; align-items:center; gap:10px; justify-content:space-between; }
+    .actions { display:flex; gap:8px; flex-wrap:wrap; }
+    .hidden { display:none; }
+    .footer-space { height: 24px; }
+    .danger { background: #ffecec; border-color:#ffcaca; }
+    .ok { color: #0a7b27; }
+    .warn { color: #b36b00; }
+    .error { color: #b00020; }
+    .search { width:100%; }
+    .subtle { background:#fafafa; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Inventario de Suplementos</h1>
+    <button id="lockBtn" title="Bloqueo por PIN">🔒</button>
+    <button id="installBtn" class="hidden">➕ Instalar</button>
+  </header>
+
+  <div class="container">
+    <div class="card subtle">
+      <div class="row">
+        <input id="search" class="search" placeholder="Buscar suplemento..." />
+      </div>
+      <div class="muted">Consejo: agrega la app a tu pantalla de inicio para usarla como app nativa.</div>
+    </div>
+
+    <div class="toolbar">
+      <button class="primary" id="addSupplementBtn">➕ Agregar suplemento</button>
+      <button id="exportBtn">⬇️ Exportar</button>
+      <input type="file" id="importFile" accept=".json" class="hidden"/>
+      <button id="importBtn">⬆️ Importar</button>
+      <button id="checkAllBtn">🛒 Checar precios (abrir links)</button>
+    </div>
+
+    <div id="supplementList"></div>
+    <div class="footer-space"></div>
+  </div>
+
+  <!-- Dialog: Add/Edit Supplement -->
+  <dialog id="supDialog">
+    <form method="dialog" id="supForm">
+      <h3 id="dlgTitle">Suplemento</h3>
+      <div class="row">
+        <input id="f_name" placeholder="Nombre (p. ej. Omega-3) *" required />
+        <input id="f_unitsPerBottle" type="number" min="1" placeholder="Cápsulas por frasco *" required />
+      </div>
+      <div class="row">
+        <input id="f_bottles" type="number" min="0" placeholder="Cantidad de frascos (enteros)" />
+        <input id="f_dosePerDay" type="number" step="0.01" min="0" placeholder="Dosis diaria (cápsulas)" />
+      </div>
+      <div class="card subtle">
+        <div class="muted">Días de la semana (opcional, para promediar dosis):</div>
+        <div class="row">
+          <label><input type="checkbox" class="dow" value="0" checked> Lun</label>
+          <label><input type="checkbox" class="dow" value="1" checked> Mar</label>
+          <label><input type="checkbox" class="dow" value="2" checked> Mié</label>
+          <label><input type="checkbox" class="dow" value="3" checked> Jue</label>
+          <label><input type="checkbox" class="dow" value="4" checked> Vie</label>
+          <label><input type="checkbox" class="dow" value="5"> Sáb</label>
+          <label><input type="checkbox" class="dow" value="6"> Dom</label>
+        </div>
+        <div class="muted">Si tomas, por ejemplo, 4 cápsulas Lun-Vie y 0 el fin de semana, marca solo Lun–Vie.</div>
+      </div>
+      <div class="row">
+        <input id="f_url_iherb" placeholder="URL iHerb" />
+        <input id="f_url_amz" placeholder="URL Amazon" />
+      </div>
+      <div class="row">
+        <input id="f_url_ml" placeholder="URL Mercado Libre" />
+        <input id="f_notes" placeholder="Notas (opcional)" />
+      </div>
+
+      <menu>
+        <button value="cancel">Cancelar</button>
+        <button class="primary" value="save">Guardar</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <!-- Simple PIN Lock Dialog -->
+  <dialog id="pinDialog">
+    <form method="dialog" id="pinForm">
+      <h3>Bloqueo por PIN</h3>
+      <div id="pinState" class="muted"></div>
+      <div class="row">
+        <input id="pinInput" type="password" placeholder="PIN (4-8 dígitos)" pattern="\d{4,8}"/>
+      </div>
+      <menu>
+        <button value="cancel">Cerrar</button>
+        <button class="primary" id="setPinBtn" value="set">Guardar PIN</button>
+        <button id="clearPinBtn" value="clear">Quitar PIN</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <script>
+    // ---- Service worker registration ----
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('service-worker.js');
+      });
+    }
+
+    // ---- Install button (PWA) ----
+    let deferredPrompt;
+    const installBtn = document.getElementById('installBtn');
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      installBtn.classList.remove('hidden');
+    });
+    installBtn?.addEventListener('click', async () => {
+      if (!deferredPrompt) return;
+      deferredPrompt.prompt();
+      await deferredPrompt.userChoice;
+      deferredPrompt = null;
+      installBtn.classList.add('hidden');
+    });
+
+    // ---- Simple storage in IndexedDB (tiny wrapper) ----
+    const DB_NAME = 'supplements-db';
+    const DB_STORE = 'kv';
+    let db;
+    function idbOpen() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, 1);
+        req.onupgradeneeded = () => {
+          const d = req.result;
+          if (!d.objectStoreNames.contains(DB_STORE)) d.createObjectStore(DB_STORE);
+        };
+        req.onsuccess = () => { db = req.result; resolve(); };
+        req.onerror = () => reject(req.error);
+      });
+    }
+    function idbGet(key) {
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(DB_STORE, 'readonly');
+        const store = tx.objectStore(DB_STORE);
+        const req = store.get(key);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+    function idbSet(key, val) {
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(DB_STORE, 'readwrite');
+        const store = tx.objectStore(DB_STORE);
+        const req = store.put(val, key);
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    // ---- Data model ----
+    const defaultState = { supplements: [], pinHash: null };
+    let state = structuredClone(defaultState);
+
+    async function loadState() {
+      await idbOpen();
+      const saved = await idbGet('state');
+      state = saved ? saved : structuredClone(defaultState);
+      render();
+    }
+    async function saveState() { await idbSet('state', state); }
+
+    function uid() { return Math.random().toString(36).slice(2, 10); }
+
+    // ---- PIN (simple) ----
+    function hash(str) {
+      // simple non-crypto hash for local check only
+      let h = 0;
+      for (let i = 0; i < str.length; i++) { h = (h << 5) - h + str.charCodeAt(i); h |= 0; }
+      return String(h);
+    }
+
+    function promptPINIfSet() {
+      const hasPIN = !!state.pinHash;
+      if (!hasPIN) return;
+      const input = prompt('Ingresa tu PIN para desbloquear');
+      if (hash(input || '') === state.pinHash) return;
+      alert('PIN incorrecto. La app seguirá bloqueada hasta que ingreses el PIN correcto (recarga para intentar de nuevo).');
+      // rudimentary lock: hide content
+      document.querySelector('.container').innerHTML = '<div class="card danger">Bloqueado. Recarga la página e ingresa el PIN correcto.</div>';
+    }
+
+    // ---- UI rendering ----
+    const listEl = document.getElementById('supplementList');
+    const searchEl = document.getElementById('search');
+
+    function filteredSupplements() {
+      const q = (searchEl.value || '').toLowerCase();
+      return state.supplements.filter(s => s.name.toLowerCase().includes(q));
+    }
+
+    function avgDailyDose(sup) {
+      const days = sup.daysOfWeek?.length ? sup.daysOfWeek.length : 7;
+      // If dosePerDay is per marked day, average to per-calendar-day
+      const perCalendarDay = (sup.dosePerDay || 0) * (days / 7);
+      return perCalendarDay;
+    }
+
+    function totalUnits(sup) {
+      return (sup.unitsPerBottle || 0) * (sup.bottles || 0);
+    }
+
+    function daysLeft(sup) {
+      const dose = avgDailyDose(sup);
+      if (!dose) return Infinity;
+      const units = totalUnits(sup);
+      return Math.floor(units / dose);
+    }
+
+    function render() {
+      listEl.innerHTML = '';
+      const arr = filteredSupplements();
+      if (!arr.length) {
+        listEl.innerHTML = '<div class="card">Aún no tienes suplementos. Pulsa "Agregar suplemento".</div>';
+        return;
+      }
+      arr.forEach(s => {
+        const dLeft = daysLeft(s);
+        const warnDays = 15; // fixed global threshold as requested
+        const status = (dLeft === Infinity) ? '<span class="muted">Sin dosis definida</span>' :
+                       (dLeft <= warnDays ? '<span class="warn">⚠️ Quedan ~'+dLeft+' días</span>' :
+                        '<span class="ok">✔︎ ~'+dLeft+' días</span>');
+        const urls = [
+          s.url_iherb ? '<span class="pill">iHerb</span>' : '',
+          s.url_amz ? '<span class="pill">Amazon</span>' : '',
+          s.url_ml ? '<span class="pill">Mercado Libre</span>' : ''
+        ].join(' ');
+
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML = `
+          <div class="sup-row">
+            <div>
+              <div><strong>${s.name}</strong></div>
+              <div class="muted">${s.bottles||0} frascos · ${s.unitsPerBottle||0} caps/frasco · dosis ${s.dosePerDay||0}/día ${s.daysOfWeek?.length? '('+s.daysOfWeek.map(dowName).join(', ')+')' : ''}</div>
+              <div>${status}</div>
+              <div>${urls}</div>
+              ${s.notes ? `<div class="muted">🗒 ${s.notes}</div>`: ''}
+            </div>
+            <div class="actions">
+              <button data-act="finish" data-id="${s.id}">Terminé un frasco</button>
+              <button data-act="addbottle" data-id="${s.id}">+1 frasco</button>
+              <button data-act="price" data-id="${s.id}">Checar precio</button>
+              <button data-act="edit" data-id="${s.id}">Editar</button>
+              <button class="danger" data-act="delete" data-id="${s.id}">Eliminar</button>
+            </div>
+          </div>
+        `;
+        listEl.appendChild(card);
+      });
+    }
+
+    function dowName(i) {
+      return ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'][i];
+    }
+
+    // ---- Events ----
+    searchEl.addEventListener('input', render);
+
+    listEl.addEventListener('click', async (e) => {
+      const btn = e.target.closest('button'); if (!btn) return;
+      const id = btn.getAttribute('data-id');
+      const sup = state.supplements.find(x => x.id === id);
+      if (!sup) return;
+
+      const act = btn.getAttribute('data-act');
+      if (act === 'finish') {
+        if ((sup.bottles||0) > 0) {
+          if (confirm('¿Seguro que terminaste un frasco de '+sup.name+'?')) {
+            sup.bottles = (sup.bottles||0) - 1;
+            await saveState(); render();
+          }
+        } else alert('No hay frascos en inventario.');
+      }
+      if (act === 'addbottle') {
+        sup.bottles = (sup.bottles||0) + 1;
+        await saveState(); render();
+      }
+      if (act === 'price') {
+        const urls = [sup.url_iherb, sup.url_amz, sup.url_ml].filter(Boolean);
+        if (!urls.length) {
+          alert('No hay URLs guardadas. Edita el suplemento y agrega al menos una URL.');
+          return;
+        }
+        // Abrir cada URL en nueva pestaña (el usuario podrá ver si hay oferta)
+        urls.forEach(u => window.open(u, '_blank'));
+      }
+      if (act === 'edit') openSupDialog(sup);
+      if (act === 'delete') {
+        if (confirm('¿Eliminar '+sup.name+'?')) {
+          state.supplements = state.supplements.filter(x => x.id !== id);
+          await saveState(); render();
+        }
+      }
+    });
+
+    // ---- Add/Edit dialog ----
+    const dlg = document.getElementById('supDialog');
+    const form = document.getElementById('supForm');
+    let editingId = null;
+
+    document.getElementById('addSupplementBtn').addEventListener('click', () => openSupDialog());
+
+    function openSupDialog(sup=null) {
+      editingId = sup?.id || null;
+      document.getElementById('dlgTitle').textContent = editingId ? 'Editar suplemento' : 'Agregar suplemento';
+
+      document.getElementById('f_name').value = sup?.name || '';
+      document.getElementById('f_unitsPerBottle').value = sup?.unitsPerBottle || '';
+      document.getElementById('f_bottles').value = sup?.bottles ?? '';
+      document.getElementById('f_dosePerDay').value = sup?.dosePerDay ?? '';
+      document.querySelectorAll('.dow').forEach(cb => { cb.checked = sup?.daysOfWeek?.includes(Number(cb.value)) ?? (Number(cb.value) < 5); });
+      document.getElementById('f_url_iherb').value = sup?.url_iherb || '';
+      document.getElementById('f_url_amz').value = sup?.url_amz || '';
+      document.getElementById('f_url_ml').value = sup?.url_ml || '';
+      document.getElementById('f_notes').value = sup?.notes || '';
+      dlg.showModal();
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (e.submitter?.value !== 'save') return;
+
+      const sup = {
+        id: editingId || uid(),
+        name: document.getElementById('f_name').value.trim(),
+        unitsPerBottle: Number(document.getElementById('f_unitsPerBottle').value),
+        bottles: Number(document.getElementById('f_bottles').value || 0),
+        dosePerDay: Number(document.getElementById('f_dosePerDay').value || 0),
+        daysOfWeek: Array.from(document.querySelectorAll('.dow:checked')).map(cb => Number(cb.value)),
+        url_iherb: document.getElementById('f_url_iherb').value.trim(),
+        url_amz: document.getElementById('f_url_amz').value.trim(),
+        url_ml: document.getElementById('f_url_ml').value.trim(),
+        notes: document.getElementById('f_notes').value.trim(),
+        createdAt: editingId ? (state.supplements.find(x=>x.id===editingId)?.createdAt) : Date.now(),
+        updatedAt: Date.now()
+      };
+
+      if (!sup.name || !sup.unitsPerBottle) { alert('Nombre y cápsulas por frasco son obligatorios.'); return; }
+      if (editingId) {
+        const idx = state.supplements.findIndex(x => x.id === editingId);
+        state.supplements[idx] = sup;
+      } else {
+        state.supplements.push(sup);
+      }
+      await saveState();
+      dlg.close();
+      render();
+    });
+
+    // ---- Import/Export ----
+    document.getElementById('exportBtn').addEventListener('click', async () => {
+      const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(state, null, 2));
+      const a = document.createElement('a');
+      a.href = dataStr;
+      a.download = 'supplements-backup.json';
+      a.click();
+    });
+
+    const importFile = document.getElementById('importFile');
+    document.getElementById('importBtn').addEventListener('click', ()=> importFile.click());
+    importFile.addEventListener('change', async (e) => {
+      const file = e.target.files[0]; if (!file) return;
+      const txt = await file.text();
+      try {
+        const parsed = JSON.parse(txt);
+        if (!parsed || typeof parsed !== 'object' || !parsed.supplements) throw new Error('Formato inválido');
+        state = parsed;
+        await saveState();
+        alert('Importación exitosa.');
+        render();
+      } catch (err) {
+        alert('No se pudo importar: '+err.message);
+      } finally {
+        importFile.value = '';
+      }
+    });
+
+    // ---- Checar todos los precios: abre todas las URLs guardadas ----
+    document.getElementById('checkAllBtn').addEventListener('click', () => {
+      const urls = [];
+      state.supplements.forEach(s => {
+        if (s.url_iherb) urls.push(s.url_iherb);
+        if (s.url_amz) urls.push(s.url_amz);
+        if (s.url_ml) urls.push(s.url_ml);
+      });
+      if (!urls.length) { alert('No hay URLs guardadas en tus suplementos.'); return; }
+      const ok = confirm('Se abrirán '+urls.length+' pestañas (iHerb/Amazon/ML). ¿Continuar?');
+      if (ok) urls.forEach(u => window.open(u, '_blank'));
+    });
+
+    // ---- PIN Dialog ----
+    const pinDlg = document.getElementById('pinDialog');
+    document.getElementById('lockBtn').addEventListener('click', ()=> {
+      document.getElementById('pinState').textContent = state.pinHash ? 'PIN configurado.' : 'No hay PIN configurado.';
+      document.getElementById('pinInput').value = '';
+      pinDlg.showModal();
+    });
+    document.getElementById('setPinBtn').addEventListener('click', async (e)=>{
+      e.preventDefault();
+      const val = document.getElementById('pinInput').value.trim();
+      if (!/^\d{4,8}$/.test(val)) { alert('El PIN debe tener 4 a 8 dígitos.'); return; }
+      state.pinHash = hash(val);
+      await saveState();
+      alert('PIN guardado.');
+      pinDlg.close();
+    });
+    document.getElementById('clearPinBtn').addEventListener('click', async (e)=>{
+      e.preventDefault();
+      state.pinHash = null;
+      await saveState();
+      alert('PIN eliminado.');
+      pinDlg.close();
+    });
+
+    // ---- Init ----
+    loadState().then(()=>{
+      promptPINIfSet();
+    });
+  </script>
+</body>
+</html>
