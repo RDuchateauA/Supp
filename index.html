@@ -364,6 +364,20 @@ if (!arr.length) {
 
     const dlg = document.getElementById('supDialog');
     const form = document.getElementById('supForm');
+    // ---- Explicit Cancel handler (iPhone-safe) ----
+    document.getElementById('cancelBtn')?.addEventListener('click', ()=>{
+      dlg.close();
+    });
+    // Close when clicking backdrop (outside dialog)
+    dlg.addEventListener('click', (event)=>{
+      const rect = dlg.getBoundingClientRect();
+      const inDialog = (
+        event.clientX >= rect.left && event.clientX <= rect.right &&
+        event.clientY >= rect.top && event.clientY <= rect.bottom
+      );
+      if (!inDialog) dlg.close();
+    });
+
     let editingId = null;
 
     document.getElementById('addSupplementBtn').addEventListener('click', () => openSupDialog());
