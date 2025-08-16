@@ -47,7 +47,7 @@
     <h1>Suplementos</h1>
     <button id="lockBtn" title="Bloqueo por PIN">🔒</button>
     <button id="installBtn" class="hidden">➕ Instalar</button>
-<button id="refreshBtn" title="Forzar actualización">🔄</button>
+    <button id="refreshBtn" title="Forzar actualización">🔄</button>
   </header>
 
   <div class="container">
@@ -67,28 +67,12 @@
     </div>
 
     <div id="supplementList"></div>
-    <div class="card">
-      <h3 style="margin:0 0 8px 0;font-size:16px;">Respaldo en Gist privado (GitHub)</h3>
-      <div class="row">
-        <input id="ghToken" type="password" placeholder="Token GitHub (scope: gist) — se guarda solo en este dispositivo" />
-        <input id="ghGistId" placeholder="Gist ID (vacío para crear uno nuevo)" />
-      </div>
-      <div class="row">
-        <input id="ghFilename" placeholder="Nombre de archivo (ej. supplements-backup.json)" value="supplements-backup.json" />
-        <label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="ghAuto" /> Respaldar al guardar</label>
-      </div>
-      <div class="actions">
-        <button id="ghTestBtn">Probar conexión</button>
-        <button id="ghBackupBtn">Respaldar ahora</button>
-      </div>
-      <div class="muted">Tu token queda guardado en tu iPhone (IndexedDB). La app no lo envía a ningún servidor, solo a la API de GitHub.</div>
-    </div>
-
     <div class="footer-space"></div>
   </div>
-  <div id="versionBadge" style="position:fixed;right:10px;bottom:10px;background:rgba(0,0,0,.65);color:#fff;padding:6px 10px;border-radius:999px;font-size:12px;z-index:1000;letter-spacing:.2px;">v1.2.1-noSW</div>
 
   <div id="toast" class="hidden" style="position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#111;color:#fff;padding:10px 14px;border-radius:999px;box-shadow:0 6px 20px rgba(0,0,0,.2);z-index:999;font-size:14px;">Hecho</div>
+
+  <div id="versionBadge" style="position:fixed;right:10px;bottom:10px;background:rgba(0,0,0,.65);color:#fff;padding:6px 10px;border-radius:999px;font-size:12px;z-index:1000;letter-spacing:.2px;">v1.3.0-noSW</div>
 
   <!-- Modal: Add/Edit Supplement -->
   <div id="supModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="dlgTitle">
@@ -154,9 +138,10 @@
   </div>
 
   <script>
-    const APP_VERSION = 'v1.2.1-noSW';
-// ---- Service worker registration (disabled in no-SW build) ----
-let deferredPrompt; const installBtn = document.getElementById('installBtn');
+    const APP_VERSION = 'v1.3.0-noSW';
+
+    // ---- Service worker registration (disabled in no-SW build) ----
+    let deferredPrompt; const installBtn = document.getElementById('installBtn');
 
     // ---- Toast ----
     const toastEl = document.getElementById('toast');
@@ -168,6 +153,24 @@ let deferredPrompt; const installBtn = document.getElementById('installBtn');
       clearTimeout(toastTimer);
       toastTimer = setTimeout(()=> toastEl.classList.add('hidden'), 1500);
     }
+
+    // ---- Force update (clear caches if any) ----
+    async function forceUpdate(){
+      try {
+        showToast('Actualizando...');
+        if ('serviceWorker' in navigator){
+          const regs = await navigator.serviceWorker.getRegistrations();
+          for (const r of regs){ await r.unregister(); }
+          const keys = await caches.keys();
+          for (const k of keys){ await caches.delete(k); }
+        }
+      } catch (e) { console.error(e); }
+      setTimeout(()=> location.reload(), 300);
+    }
+    document.getElementById('refreshBtn')?.addEventListener('click', ()=>{
+      const ok = confirm('Esto forzará la actualización de la app y borrará el caché (no tu inventario). ¿Continuar?');
+      if (ok) forceUpdate();
+    });
 
     // ---- IndexedDB ----
     const DB_NAME = 'supplements-db';
@@ -203,61 +206,6 @@ let deferredPrompt; const installBtn = document.getElementById('installBtn');
       });
     }
 
-
-    // ---- Backup (Gist) helpers ----
-    function getBackupConfig() {
-      if (!state.backup) state.backup = { mode: 'gist', token: '', gistId: '', filename: 'supplements-backup.json', auto: false };
-      // migrate defaults if missing
-      state.backup.mode = state.backup.mode || 'gist';
-      state.backup.filename = state.backup.filename || 'supplements-backup.json';
-      state.backup.auto = !!state.backup.auto;
-      return state.backup;
-    }
-    async function saveBackupConfig(cfg) {
-      state.backup = { ...getBackupConfig(), ...cfg };
-      await saveState();
-    }
-    async function exportStateJSON() {
-      const copy = JSON.parse(JSON.stringify(state));
-      if (copy.backup && copy.backup.token) copy.backup.token = '';
-      return JSON.stringify(copy, null, 2);
-    }
-    async function backupToGist() {
-      const cfg = getBackupConfig();
-      if (!cfg.token) { alert('Falta el token de GitHub.'); return; }
-      const fname = cfg.filename || 'supplements-backup.json';
-      const body = { files: {} };
-      body.files[fname] = { content: await exportStateJSON() };
-      let url = 'https://api.github.com/gists';
-      let method = 'POST';
-      if (cfg.gistId) { url = `https://api.github.com/gists/${cfg.gistId}`; method = 'PATCH'; }
-      else { body.description = 'Backup de Inventario de Suplementos (PWA)'; body.public = false; }
-      try {
-        const res = await fetch(url, {
-          method,
-          headers: {
-            'Authorization': `Bearer ${cfg.token}`,
-            'Accept': 'application/vnd.github+json'
-          },
-          body: JSON.stringify(body)
-        });
-        if (!res.ok) {
-          const txt = await res.text();
-          throw new Error(`GitHub API error ${res.status}: ${txt}`);
-        }
-        const data = await res.json();
-        if (!cfg.gistId) {
-          state.backup.gistId = data.id;
-          await saveState();
-        }
-        showToast('Respaldo enviado a Gist');
-        return data;
-      } catch (e) {
-        console.error(e);
-        alert('Error al respaldar: ' + e.message);
-      }
-    }
-
     // ---- Data model ----
     const defaultState = { supplements: [], pinHash: null };
     let state = structuredClone(defaultState);
@@ -266,6 +214,13 @@ let deferredPrompt; const installBtn = document.getElementById('installBtn');
       await idbOpen();
       const saved = await idbGet('state');
       state = saved ? saved : structuredClone(defaultState);
+
+      // One-time purge: remove any previous backup config (to erase tokens)
+      if (state.backup) {
+        delete state.backup;
+        await saveState();
+      }
+
       render();
     }
     async function saveState() { await idbSet('state', state); }
@@ -368,6 +323,9 @@ let deferredPrompt; const installBtn = document.getElementById('installBtn');
       });
     }
 
+    // ---- Toast utility ----
+    function toastAction(msg) { render(); showToast(msg); }
+
     // ---- Events ----
     searchEl.addEventListener('input', render);
 
@@ -382,19 +340,19 @@ let deferredPrompt; const installBtn = document.getElementById('installBtn');
         if ((sup.bottles||0) > 0) {
           if (confirm('¿Seguro que terminaste un frasco de '+sup.name+'?')) {
             sup.bottles = (sup.bottles||0) - 1;
-            await saveState(); render(); showToast('Se descontó 1 frasco');
+            await saveState(); toastAction('Se descontó 1 frasco');
           }
         } else alert('No hay frascos en inventario.');
       }
-      if (act === 'addbottle') { sup.bottles = (sup.bottles||0) + 1; await saveState(); render(); showToast('+1 frasco'); try { if (getBackupConfig().auto) await backupToGist(); } catch(e){} }
+      if (act === 'addbottle') { sup.bottles = (sup.bottles||0) + 1; await saveState(); toastAction('+1 frasco'); }
       if (act === 'subbottle') {
-        if ((sup.bottles||0) > 0) { sup.bottles = (sup.bottles||0) - 1; await saveState(); render(); showToast('-1 frasco'); try { if (getBackupConfig().auto) await backupToGist(); } catch(e){} }
+        if ((sup.bottles||0) > 0) { sup.bottles = (sup.bottles||0) - 1; await saveState(); toastAction('-1 frasco'); }
         else { alert('No puedes bajar de 0 frascos.'); }
       }
       if (act === 'dup') {
         const copy = JSON.parse(JSON.stringify(sup));
         copy.id = uid(); copy.name = sup.name + ' (copia)'; copy.createdAt = Date.now(); copy.updatedAt = Date.now();
-        state.supplements.push(copy); await saveState(); render(); showToast('Duplicado'); try { if (getBackupConfig().auto) await backupToGist(); } catch(e){}
+        state.supplements.push(copy); await saveState(); toastAction('Duplicado');
       }
       if (act === 'price') {
         const urls = [sup.url_iherb, sup.url_amz, sup.url_ml].filter(Boolean);
@@ -403,7 +361,7 @@ let deferredPrompt; const installBtn = document.getElementById('installBtn');
       }
       if (act === 'edit') openSupDialog(sup);
       if (act === 'delete') {
-        if (confirm('¿Eliminar '+sup.name+'?')) { state.supplements = state.supplements.filter(x => x.id !== id); await saveState(); render(); showToast('Eliminado'); try { if (getBackupConfig().auto) await backupToGist(); } catch(e){} }
+        if (confirm('¿Eliminar '+sup.name+'?')) { state.supplements = state.supplements.filter(x => x.id !== id); await saveState(); toastAction('Eliminado'); }
       }
     });
 
@@ -466,7 +424,6 @@ let deferredPrompt; const installBtn = document.getElementById('installBtn');
       supModal.classList.remove('show');
       render();
       showToast('Guardado');
-      try { if (getBackupConfig().auto) await backupToGist(); } catch(e){ console.warn('Auto-backup falló', e); }
     });
 
     // ---- Import/Export ----
@@ -485,47 +442,11 @@ let deferredPrompt; const installBtn = document.getElementById('installBtn');
         const parsed = JSON.parse(txt);
         if (!parsed || typeof parsed !== 'object' || !parsed.supplements) throw new Error('Formato inválido');
         state = parsed;
+        if (state.backup) delete state.backup; // seguridad: limpiar cualquier config previa
         await saveState(); render(); showToast('Importado');
-      } catch (err) { alert('No se pudo importar: '+err.message); }
+      } catch (err) { alert('No se pudo importar: ' + err.message); }
       finally { importFile.value = ''; }
     });
-
-
-    // ---- Wire Backup UI ----
-    const ghTokenEl = document.getElementById('ghToken');
-    const ghGistIdEl = document.getElementById('ghGistId');
-    const ghFilenameEl = document.getElementById('ghFilename');
-    const ghAutoEl = document.getElementById('ghAuto');
-    const ghTestBtn = document.getElementById('ghTestBtn');
-    const ghBackupBtn = document.getElementById('ghBackupBtn');
-
-    function loadBackupUI() {
-      const b = getBackupConfig();
-      ghTokenEl.value = b.token || '';
-      ghGistIdEl.value = b.gistId || '';
-      ghFilenameEl.value = b.filename || 'supplements-backup.json';
-      ghAutoEl.checked = !!b.auto;
-    }
-
-    ghTokenEl.addEventListener('change', async ()=> { await saveBackupConfig({ token: ghTokenEl.value.trim() }); showToast('Token guardado'); });
-    ghGistIdEl.addEventListener('change', async ()=> { await saveBackupConfig({ gistId: ghGistIdEl.value.trim() }); showToast('Gist ID guardado'); });
-    ghFilenameEl.addEventListener('change', async ()=> { await saveBackupConfig({ filename: ghFilenameEl.value.trim() }); showToast('Archivo guardado'); });
-    ghAutoEl.addEventListener('change', async ()=> { await saveBackupConfig({ auto: ghAutoEl.checked }); showToast(ghAutoEl.checked ? 'Auto-backup activado' : 'Auto-backup desactivado'); });
-
-    ghTestBtn.addEventListener('click', async ()=> {
-      const b = getBackupConfig();
-      if (!b.token) { alert('Agrega tu token GitHub primero.'); return; }
-      try {
-        const res = await fetch('https://api.github.com/user', {
-          headers: { 'Authorization': `Bearer ${b.token}`, 'Accept':'application/vnd.github+json' }
-        });
-        if (!res.ok) throw new Error('Token inválido o permisos insuficientes.');
-        const u = await res.json();
-        showToast('Token OK: ' + (u.login || 'usuario'));
-      } catch (e) { alert('Error probando token: ' + e.message); }
-    });
-
-    ghBackupBtn.addEventListener('click', backupToGist);
 
     // ---- Checar todos los precios ----
     document.getElementById('checkAllBtn').addEventListener('click', () => {
@@ -560,18 +481,16 @@ let deferredPrompt; const installBtn = document.getElementById('installBtn');
       if (!/^\d{4,8}$/.test(val)) { alert('El PIN debe tener 4 a 8 dígitos.'); return; }
       state.pinHash = hash(val);
       await saveState();
-      showToast('PIN guardado'); pinModal.classList.remove('show'); try { if (getBackupConfig().auto) await backupToGist(); } catch(e){}
+      showToast('PIN guardado'); pinModal.classList.remove('show');
     });
     document.getElementById('clearPinBtn').addEventListener('click', async (e)=>{
       e.preventDefault();
       state.pinHash = null;
       await saveState();
-      showToast('PIN eliminado'); pinModal.classList.remove('show'); try { if (getBackupConfig().auto) await backupToGist(); } catch(e){}
+      showToast('PIN eliminado'); pinModal.classList.remove('show');
     });
 
     // ---- Init ----
-    document.getElementById('versionBadge').textContent = APP_VERSION;
-    loadBackupUI();
     loadState().then(()=>{
       promptPINIfSet();
       document.getElementById('search')?.focus();
