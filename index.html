@@ -32,6 +32,14 @@
     .error { color: #b00020; }
     .search { width:100%; }
     .subtle { background:#fafafa; }
+
+    /* Modal (iOS-safe) */
+    .modal { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; z-index: 50; }
+    .modal.show { display: flex; }
+    .modal-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,.35); }
+    .modal-card { position: relative; background: #fff; border-radius: 16px; width: min(680px, 92vw); padding: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.25); border: 1px solid #eee; }
+    .modal-card h3 { margin: 0 0 8px 0; font-size: 18px; }
+    .modal-card menu { display: flex; gap: 8px; justify-content: flex-end; padding: 0; margin-top: 12px; }
   </style>
 </head>
 <body>
@@ -46,7 +54,7 @@
       <div class="row">
         <input id="search" class="search" placeholder="Buscar suplemento..." />
       </div>
-      <div class="muted">Consejo: agrega la app a tu pantalla de inicio para usarla como app nativa.</div>
+      <div class="muted">Consejo: ábrela en Safari y “Agregar a pantalla de inicio” para usarla como app nativa.</div>
     </div>
 
     <div class="toolbar">
@@ -60,64 +68,71 @@
     <div id="supplementList"></div>
     <div class="footer-space"></div>
   </div>
+
   <div id="toast" class="hidden" style="position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#111;color:#fff;padding:10px 14px;border-radius:999px;box-shadow:0 6px 20px rgba(0,0,0,.2);z-index:999;font-size:14px;">Hecho</div>
 
-  <!-- Dialog: Add/Edit Supplement -->
-  <dialog id="supDialog">
-    <form id="supForm">
-      <h3 id="dlgTitle">Suplemento</h3>
-      <div class="row">
-        <input id="f_name" placeholder="Nombre (p. ej. Omega-3) *" required />
-        <input id="f_unitsPerBottle" type="number" min="1" placeholder="Cápsulas por frasco *" required / inputmode="numeric" enterkeyhint="done">
-      </div>
-      <div class="row">
-        <input id="f_bottles" type="number" min="0" placeholder="Cantidad de frascos (enteros)" / inputmode="numeric" enterkeyhint="done">
-        <input id="f_dosePerDay" type="number" step="0.01" min="0" placeholder="Dosis diaria (cápsulas)" / inputmode="decimal" enterkeyhint="done">
-      </div>
-      <div class="card subtle">
-        <div class="muted">Días de la semana (opcional, para promediar dosis):</div>
+  <!-- Modal: Add/Edit Supplement -->
+  <div id="supModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="dlgTitle">
+    <div class="modal-backdrop"></div>
+    <div class="modal-card">
+      <form id="supForm" novalidate>
+        <h3 id="dlgTitle">Suplemento</h3>
         <div class="row">
-          <label><input type="checkbox" class="dow" value="0" checked> Lun</label>
-          <label><input type="checkbox" class="dow" value="1" checked> Mar</label>
-          <label><input type="checkbox" class="dow" value="2" checked> Mié</label>
-          <label><input type="checkbox" class="dow" value="3" checked> Jue</label>
-          <label><input type="checkbox" class="dow" value="4" checked> Vie</label>
-          <label><input type="checkbox" class="dow" value="5"> Sáb</label>
-          <label><input type="checkbox" class="dow" value="6"> Dom</label>
+          <input id="f_name" placeholder="Nombre (p. ej. Omega-3) *" required />
+          <input id="f_unitsPerBottle" type="number" min="1" placeholder="Cápsulas por frasco *" inputmode="numeric" enterkeyhint="done" required />
         </div>
-        <div class="muted">Si tomas, por ejemplo, 4 cápsulas Lun-Vie y 0 el fin de semana, marca solo Lun–Vie.</div>
-      </div>
-      <div class="row">
-        <input id="f_url_iherb" placeholder="URL iHerb" />
-        <input id="f_url_amz" placeholder="URL Amazon" />
-      </div>
-      <div class="row">
-        <input id="f_url_ml" placeholder="URL Mercado Libre" />
-        <input id="f_notes" placeholder="Notas (opcional)" />
-      </div>
+        <div class="row">
+          <input id="f_bottles" type="number" min="0" placeholder="Cantidad de frascos (enteros)" inputmode="numeric" enterkeyhint="done"/>
+          <input id="f_dosePerDay" type="number" step="0.01" min="0" placeholder="Dosis diaria (cápsulas)" inputmode="decimal" enterkeyhint="done"/>
+        </div>
+        <div class="card subtle">
+          <div class="muted">Días de la semana (opcional, para promediar dosis):</div>
+          <div class="row">
+            <label><input type="checkbox" class="dow" value="0" checked> Lun</label>
+            <label><input type="checkbox" class="dow" value="1" checked> Mar</label>
+            <label><input type="checkbox" class="dow" value="2" checked> Mié</label>
+            <label><input type="checkbox" class="dow" value="3" checked> Jue</label>
+            <label><input type="checkbox" class="dow" value="4" checked> Vie</label>
+            <label><input type="checkbox" class="dow" value="5"> Sáb</label>
+            <label><input type="checkbox" class="dow" value="6"> Dom</label>
+          </div>
+          <div class="muted">Si tomas 4 cápsulas Lun–Vie y 0 el fin de semana, marca solo Lun–Vie.</div>
+        </div>
+        <div class="row">
+          <input id="f_url_iherb" placeholder="URL iHerb" />
+          <input id="f_url_amz" placeholder="URL Amazon" />
+        </div>
+        <div class="row">
+          <input id="f_url_ml" placeholder="URL Mercado Libre" />
+          <input id="f_notes" placeholder="Notas (opcional)" />
+        </div>
 
-      <menu>
-  <button type="button" id="cancelSupBtn">Cancelar</button>
-  <button class="primary" type="submit" name="action" value="save">Guardar</button>
-</menu>
-    </form>
-  </dialog>
+        <menu>
+          <button id="cancelBtn" type="button">Cancelar</button>
+          <button class="primary" value="save">Guardar</button>
+        </menu>
+      </form>
+    </div>
+  </div>
 
-  <!-- Simple PIN Lock Dialog -->
-  <dialog id="pinDialog">
-    <form method="dialog" id="pinForm">
-      <h3>Bloqueo por PIN</h3>
-      <div id="pinState" class="muted"></div>
-      <div class="row">
-        <input id="pinInput" type="password" placeholder="PIN (4-8 dígitos)" pattern="\d{4,8}"/>
-      </div>
-      <menu>
-        <button value="cancel">Cerrar</button>
-        <button class="primary" id="setPinBtn" value="set">Guardar PIN</button>
-        <button id="clearPinBtn" value="clear">Quitar PIN</button>
-      </menu>
-    </form>
-  </dialog>
+  <!-- Modal: PIN -->
+  <div id="pinModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="pinTitle">
+    <div class="modal-backdrop"></div>
+    <div class="modal-card">
+      <form id="pinForm" novalidate>
+        <h3 id="pinTitle">Bloqueo por PIN</h3>
+        <div id="pinState" class="muted"></div>
+        <div class="row">
+          <input id="pinInput" type="password" placeholder="PIN (4-8 dígitos)" pattern="\d{4,8}"/>
+        </div>
+        <menu>
+          <button id="pinCloseBtn" type="button">Cerrar</button>
+          <button class="primary" id="setPinBtn" value="set">Guardar PIN</button>
+          <button id="clearPinBtn" value="clear">Quitar PIN</button>
+        </menu>
+      </form>
+    </div>
+  </div>
 
   <script>
     // ---- Service worker registration ----
@@ -143,7 +158,18 @@
       installBtn.classList.add('hidden');
     });
 
-    // ---- Simple storage in IndexedDB (tiny wrapper) ----
+    // ---- Toast ----
+    const toastEl = document.getElementById('toast');
+    let toastTimer;
+    function showToast(msg) {
+      if (!toastEl) return;
+      toastEl.textContent = msg;
+      toastEl.classList.remove('hidden');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(()=> toastEl.classList.add('hidden'), 1500);
+    }
+
+    // ---- IndexedDB ----
     const DB_NAME = 'supplements-db';
     const DB_STORE = 'kv';
     let db;
@@ -177,18 +203,6 @@
       });
     }
 
-    
-    // ---- Toast ----
-    const toastEl = document.getElementById('toast');
-    let toastTimer;
-    function showToast(msg) {
-      if (!toastEl) return;
-      toastEl.textContent = msg;
-      toastEl.classList.remove('hidden');
-      clearTimeout(toastTimer);
-      toastTimer = setTimeout(()=> toastEl.classList.add('hidden'), 1500);
-    }
-
     // ---- Data model ----
     const defaultState = { supplements: [], pinHash: null };
     let state = structuredClone(defaultState);
@@ -203,9 +217,8 @@
 
     function uid() { return Math.random().toString(36).slice(2, 10); }
 
-    // ---- PIN (simple) ----
+    // ---- PIN (simple local hash) ----
     function hash(str) {
-      // simple non-crypto hash for local check only
       let h = 0;
       for (let i = 0; i < str.length; i++) { h = (h << 5) - h + str.charCodeAt(i); h |= 0; }
       return String(h);
@@ -217,11 +230,10 @@
       const input = prompt('Ingresa tu PIN para desbloquear');
       if (hash(input || '') === state.pinHash) return;
       alert('PIN incorrecto. La app seguirá bloqueada hasta que ingreses el PIN correcto (recarga para intentar de nuevo).');
-      // rudimentary lock: hide content
       document.querySelector('.container').innerHTML = '<div class="card danger">Bloqueado. Recarga la página e ingresa el PIN correcto.</div>';
     }
 
-    // ---- UI rendering ----
+    // ---- UI helpers ----
     const listEl = document.getElementById('supplementList');
     const searchEl = document.getElementById('search');
 
@@ -232,7 +244,6 @@
 
     function avgDailyDose(sup) {
       const days = sup.daysOfWeek?.length ? sup.daysOfWeek.length : 7;
-      // If dosePerDay is per marked day, average to per-calendar-day
       const perCalendarDay = (sup.dosePerDay || 0) * (days / 7);
       return perCalendarDay;
     }
@@ -248,10 +259,11 @@
       return Math.floor(units / dose);
     }
 
+    function dowName(i) { return ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'][i]; }
+
     function render() {
       listEl.innerHTML = '';
       let arr = filteredSupplements();
-      // Sort: by daysLeft ascending; Infinity (sin dosis) goes last
       arr = arr.slice().sort((a,b)=>{
         const da = daysLeft(a), db = daysLeft(b);
         if (da === Infinity && db === Infinity) return 0;
@@ -259,13 +271,13 @@
         if (db === Infinity) return -1;
         return da - db;
       });
-if (!arr.length) {
+      if (!arr.length) {
         listEl.innerHTML = '<div class="card">Aún no tienes suplementos. Pulsa "Agregar suplemento".</div>';
         return;
       }
       arr.forEach(s => {
         const dLeft = daysLeft(s);
-        const warnDays = 15; // fixed global threshold as requested
+        const warnDays = 15;
         const status = (dLeft === Infinity) ? '<span class="muted">Sin dosis definida</span>' :
                        (dLeft <= warnDays ? '<span class="warn">⚠️ Quedan ~'+dLeft+' días</span>' :
                         '<span class="ok">✔︎ ~'+dLeft+' días</span>');
@@ -288,7 +300,9 @@ if (!arr.length) {
             </div>
             <div class="actions">
               <button data-act="finish" data-id="${s.id}">Terminé un frasco</button>
-              <button data-act="addbottle" data-id="${s.id}">+1 frasco</button><button data-act="subbottle" data-id="${s.id}">-1 frasco</button><button data-act="dup" data-id="${s.id}">Duplicar</button>
+              <button data-act="addbottle" data-id="${s.id}">+1 frasco</button>
+              <button data-act="subbottle" data-id="${s.id}">-1 frasco</button>
+              <button data-act="dup" data-id="${s.id}">Duplicar</button>
               <button data-act="price" data-id="${s.id}">Checar precio</button>
               <button data-act="edit" data-id="${s.id}">Editar</button>
               <button class="danger" data-act="delete" data-id="${s.id}">Eliminar</button>
@@ -299,14 +313,9 @@ if (!arr.length) {
       });
     }
 
-    function dowName(i) {
-      return ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'][i];
-    }
-
     // ---- Events ----
     searchEl.addEventListener('input', render);
 
-    
     listEl.addEventListener('click', async (e) => {
       const btn = e.target.closest('button'); if (!btn) return;
       const id = btn.getAttribute('data-id');
@@ -322,69 +331,35 @@ if (!arr.length) {
           }
         } else alert('No hay frascos en inventario.');
       }
-      if (act === 'addbottle') {
-        sup.bottles = (sup.bottles||0) + 1;
-        await saveState(); render(); showToast('+1 frasco');
-      }
+      if (act === 'addbottle') { sup.bottles = (sup.bottles||0) + 1; await saveState(); render(); showToast('+1 frasco'); }
       if (act === 'subbottle') {
-        if ((sup.bottles||0) > 0) {
-          sup.bottles = (sup.bottles||0) - 1;
-          await saveState(); render(); showToast('-1 frasco');
-        } else {
-          alert('No puedes bajar de 0 frascos.');
-        }
+        if ((sup.bottles||0) > 0) { sup.bottles = (sup.bottles||0) - 1; await saveState(); render(); showToast('-1 frasco'); }
+        else { alert('No puedes bajar de 0 frascos.'); }
       }
       if (act === 'dup') {
         const copy = JSON.parse(JSON.stringify(sup));
-        copy.id = uid();
-        copy.name = sup.name + ' (copia)';
-        copy.createdAt = Date.now();
-        copy.updatedAt = Date.now();
-        state.supplements.push(copy);
-        await saveState(); render(); showToast('Duplicado');
+        copy.id = uid(); copy.name = sup.name + ' (copia)'; copy.createdAt = Date.now(); copy.updatedAt = Date.now();
+        state.supplements.push(copy); await saveState(); render(); showToast('Duplicado');
       }
       if (act === 'price') {
         const urls = [sup.url_iherb, sup.url_amz, sup.url_ml].filter(Boolean);
-        if (!urls.length) {
-          alert('No hay URLs guardadas. Edita el suplemento y agrega al menos una URL.');
-          return;
-        }
+        if (!urls.length) { alert('No hay URLs guardadas. Edita el suplemento y agrega al menos una URL.'); return; }
         urls.forEach(u => window.open(u, '_blank'));
       }
       if (act === 'edit') openSupDialog(sup);
       if (act === 'delete') {
-        if (confirm('¿Eliminar '+sup.name+'?')) {
-          state.supplements = state.supplements.filter(x => x.id !== id);
-          await saveState(); render(); showToast('Eliminado');
-        }
+        if (confirm('¿Eliminar '+sup.name+'?')) { state.supplements = state.supplements.filter(x => x.id !== id); await saveState(); render(); showToast('Eliminado'); }
       }
     });
 
-    // ---- Add/Edit dialog ----
-
-    const dlg = document.getElementById('supDialog');
+    // ---- Add/Edit modal ----
+    const supModal = document.getElementById('supModal');
     const form = document.getElementById('supForm');
-    // ---- Explicit Cancel handler (iPhone-safe) ----
-    document.getElementById('cancelBtn')?.addEventListener('click', ()=>{
-      dlg.close();
-    });
-    // Close when clicking backdrop (outside dialog)
-    dlg.addEventListener('click', (event)=>{
-      const rect = dlg.getBoundingClientRect();
-      const inDialog = (
-        event.clientX >= rect.left && event.clientX <= rect.right &&
-        event.clientY >= rect.top && event.clientY <= rect.bottom
-      );
-      if (!inDialog) dlg.close();
-    });
-
     let editingId = null;
 
     document.getElementById('addSupplementBtn').addEventListener('click', () => openSupDialog());
 
     function openSupDialog(sup=null) {
-      const nameInput = document.getElementById('f_name');
-      const unitsInput = document.getElementById('f_unitsPerBottle');
       editingId = sup?.id || null;
       document.getElementById('dlgTitle').textContent = editingId ? 'Editar suplemento' : 'Agregar suplemento';
 
@@ -397,17 +372,22 @@ if (!arr.length) {
       document.getElementById('f_url_amz').value = sup?.url_amz || '';
       document.getElementById('f_url_ml').value = sup?.url_ml || '';
       document.getElementById('f_notes').value = sup?.notes || '';
-      dlg.showModal();
-      setTimeout(()=> nameInput?.focus(), 0);
-      // ESC to close
-      const onKey = (ev)=>{ if (ev.key === 'Escape') { dlg.close(); dlg.removeEventListener('keydown', onKey);} };      dlg.addEventListener('keydown', onKey, { once: false });
+
+      supModal.classList.add('show');
+      setTimeout(()=> document.getElementById('f_name')?.focus(), 0);
     }
 
+    document.getElementById('cancelBtn')?.addEventListener('click', ()=> supModal.classList.remove('show'));
+    supModal?.addEventListener('click', (ev)=>{
+      const card = supModal.querySelector('.modal-card'); if (!card) return;
+      if (!card.contains(ev.target)) supModal.classList.remove('show');
+    });
+    document.addEventListener('keydown', (ev)=>{ if (supModal.classList.contains('show') && ev.key==='Escape') supModal.classList.remove('show'); });
+
     form.addEventListener('submit', async (e) => {
+      const isSave = e.submitter?.value === 'save' || (e.submitter && e.submitter.textContent.includes('Guardar'));
+      if (!isSave) { return; }
       e.preventDefault();
-      const action = (new FormData(form)).get('action');
-      if (action !== 'save') return;
-      if (!form.reportValidity()) return;
 
       const sup = {
         id: editingId || uid(),
@@ -425,27 +405,18 @@ if (!arr.length) {
       };
 
       if (!sup.name || !sup.unitsPerBottle) { alert('Nombre y cápsulas por frasco son obligatorios.'); return; }
-      if (editingId) {
-        const idx = state.supplements.findIndex(x => x.id === editingId);
-        state.supplements[idx] = sup;
-      } else {
-        state.supplements.push(sup);
-      }
+      if (editingId) { const idx = state.supplements.findIndex(x => x.id === editingId); state.supplements[idx] = sup; }
+      else { state.supplements.push(sup); }
       await saveState();
-      dlg.close();
+      supModal.classList.remove('show');
       render();
       showToast('Guardado');
     });
 
-    document.getElementById('cancelSupBtn').addEventListener('click', () => dlg.close());
-
     // ---- Import/Export ----
     document.getElementById('exportBtn').addEventListener('click', async () => {
       const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(state, null, 2));
-      const a = document.createElement('a');
-      a.href = dataStr;
-      a.download = 'supplements-backup.json';
-      a.click();
+      const a = document.createElement('a'); a.href = dataStr; a.download = 'supplements-backup.json'; a.click();
       showToast('Exportado');
     });
 
@@ -453,22 +424,17 @@ if (!arr.length) {
     document.getElementById('importBtn').addEventListener('click', ()=> importFile.click());
     importFile.addEventListener('change', async (e) => {
       const file = e.target.files[0]; if (!file) return;
-      const txt = await file.text();
       try {
+        const txt = await file.text();
         const parsed = JSON.parse(txt);
         if (!parsed || typeof parsed !== 'object' || !parsed.supplements) throw new Error('Formato inválido');
         state = parsed;
-        await saveState();
-        showToast('Importado');
-        render();
-      } catch (err) {
-        alert('No se pudo importar: '+err.message);
-      } finally {
-        importFile.value = '';
-      }
+        await saveState(); render(); showToast('Importado');
+      } catch (err) { alert('No se pudo importar: '+err.message); }
+      finally { importFile.value = ''; }
     });
 
-    // ---- Checar todos los precios: abre todas las URLs guardadas ----
+    // ---- Checar todos los precios ----
     document.getElementById('checkAllBtn').addEventListener('click', () => {
       const urls = [];
       state.supplements.forEach(s => {
@@ -481,28 +447,33 @@ if (!arr.length) {
       if (ok) urls.forEach(u => window.open(u, '_blank'));
     });
 
-    // ---- PIN Dialog ----
-    const pinDlg = document.getElementById('pinDialog');
+    // ---- PIN modal ----
+    const pinModal = document.getElementById('pinModal');
     document.getElementById('lockBtn').addEventListener('click', ()=> {
       document.getElementById('pinState').textContent = state.pinHash ? 'PIN configurado.' : 'No hay PIN configurado.';
       document.getElementById('pinInput').value = '';
-      pinDlg.showModal();
+      pinModal.classList.add('show');
     });
+    document.getElementById('pinCloseBtn')?.addEventListener('click', ()=> pinModal.classList.remove('show'));
+    pinModal?.addEventListener('click', (ev)=>{
+      const card = pinModal.querySelector('.modal-card'); if (!card) return;
+      if (!card.contains(ev.target)) pinModal.classList.remove('show');
+    });
+    document.addEventListener('keydown', (ev)=>{ if (pinModal.classList.contains('show') && ev.key==='Escape') pinModal.classList.remove('show'); });
+
     document.getElementById('setPinBtn').addEventListener('click', async (e)=>{
       e.preventDefault();
       const val = document.getElementById('pinInput').value.trim();
       if (!/^\d{4,8}$/.test(val)) { alert('El PIN debe tener 4 a 8 dígitos.'); return; }
       state.pinHash = hash(val);
       await saveState();
-      alert('PIN guardado.');
-      pinDlg.close();
+      showToast('PIN guardado'); pinModal.classList.remove('show');
     });
     document.getElementById('clearPinBtn').addEventListener('click', async (e)=>{
       e.preventDefault();
       state.pinHash = null;
       await saveState();
-      alert('PIN eliminado.');
-      pinDlg.close();
+      showToast('PIN eliminado'); pinModal.classList.remove('show');
     });
 
     // ---- Init ----
