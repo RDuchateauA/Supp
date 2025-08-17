@@ -26,10 +26,8 @@
     .actions { display:flex; gap:8px; flex-wrap:wrap; }
     .hidden { display:none; }
     .footer-space { height: 24px; }
-    .danger { background: #ffecec; border-color:#ffcaca; }
     .ok { color: #0a7b27; }
     .warn { color: #b36b00; }
-    .error { color: #b00020; }
     .search { width:100%; }
     .subtle { background:#fafafa; }
 
@@ -40,12 +38,16 @@
     .modal-card { position: relative; background: #fff; border-radius: 16px; width: min(680px, 92vw); padding: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.25); border: 1px solid #eee; }
     .modal-card h3 { margin: 0 0 8px 0; font-size: 18px; }
     .modal-card menu { display: flex; gap: 8px; justify-content: flex-end; padding: 0; margin-top: 12px; }
+
+    .metrics { display:grid; grid-template-columns: repeat(auto-fit,minmax(180px,1fr)); gap:10px; }
+    .metric { background: var(--card); border:1px solid #eee; border-radius: 12px; padding:10px; }
+    .metric .label { font-size:12px; color:#666; }
+    .metric .value { font-weight:600; font-size:16px; }
   </style>
 </head>
 <body>
   <header>
     <h1>Suplementos</h1>
-    <button id="lockBtn" title="Bloqueo por PIN">🔒</button>
     <button id="installBtn" class="hidden">➕ Instalar</button>
     <button id="refreshBtn" title="Forzar actualización">🔄</button>
   </header>
@@ -55,7 +57,7 @@
       <div class="row">
         <input id="search" class="search" placeholder="Buscar suplemento..." />
       </div>
-      <div class="muted">Consejo: ábrela en Safari y “Agregar a pantalla de inicio” para usarla como app nativa.</div>
+      <div class="muted">Consejo: ábrela en Safari y “Agregar a pantalla de inicio” para usarla como app nativa. Usa la <b>misma moneda</b> al capturar costos.</div>
     </div>
 
     <div class="toolbar">
@@ -66,13 +68,26 @@
       <button id="checkAllBtn">🛒 Checar precios (abrir links)</button>
     </div>
 
+    <div class="card">
+      <h3 style="margin:0 0 8px 0;font-size:16px;">Métricas de gasto</h3>
+      <div class="metrics">
+        <div class="metric"><div class="label">Gastado (7 días)</div><div class="value" id="spent7">—</div></div>
+        <div class="metric"><div class="label">Gastado (30 días)</div><div class="value" id="spent30">—</div></div>
+        <div class="metric"><div class="label">Gastado (365 días)</div><div class="value" id="spent365">—</div></div>
+        <div class="metric"><div class="label">Promedio / semana</div><div class="value" id="avgWeek">—</div></div>
+        <div class="metric"><div class="label">Promedio / mes</div><div class="value" id="avgMonth">—</div></div>
+        <div class="metric"><div class="label">Promedio / año</div><div class="value" id="avgYear">—</div></div>
+      </div>
+      <div class="muted">Los promedios se calculan con tu historial de compras (costo por frasco) desde que empezaste a registrar.</div>
+    </div>
+
     <div id="supplementList"></div>
     <div class="footer-space"></div>
   </div>
 
   <div id="toast" class="hidden" style="position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#111;color:#fff;padding:10px 14px;border-radius:999px;box-shadow:0 6px 20px rgba(0,0,0,.2);z-index:999;font-size:14px;">Hecho</div>
 
-  <div id="versionBadge" style="position:fixed;right:10px;bottom:10px;background:rgba(0,0,0,.65);color:#fff;padding:6px 10px;border-radius:999px;font-size:12px;z-index:1000;letter-spacing:.2px;">v1.3.0-noSW</div>
+  <div id="versionBadge" style="position:fixed;right:10px;bottom:10px;background:rgba(0,0,0,.65);color:#fff;padding:6px 10px;border-radius:999px;font-size:12px;z-index:1000;letter-spacing:.2px;">v1.4.0-noSW</div>
 
   <!-- Modal: Add/Edit Supplement -->
   <div id="supModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="dlgTitle">
@@ -118,30 +133,8 @@
     </div>
   </div>
 
-  <!-- Modal: PIN -->
-  <div id="pinModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="pinTitle">
-    <div class="modal-backdrop"></div>
-    <div class="modal-card">
-      <form id="pinForm" novalidate>
-        <h3 id="pinTitle">Bloqueo por PIN</h3>
-        <div id="pinState" class="muted"></div>
-        <div class="row">
-          <input id="pinInput" type="password" placeholder="PIN (4-8 dígitos)" pattern="\d{4,8}"/>
-        </div>
-        <menu>
-          <button id="pinCloseBtn" type="button">Cerrar</button>
-          <button class="primary" id="setPinBtn" value="set">Guardar PIN</button>
-          <button id="clearPinBtn" value="clear">Quitar PIN</button>
-        </menu>
-      </form>
-    </div>
-  </div>
-
   <script>
-    const APP_VERSION = 'v1.3.0-noSW';
-
-    // ---- Service worker registration (disabled in no-SW build) ----
-    let deferredPrompt; const installBtn = document.getElementById('installBtn');
+    const APP_VERSION = 'v1.4.0-noSW';
 
     // ---- Toast ----
     const toastEl = document.getElementById('toast');
@@ -207,7 +200,7 @@
     }
 
     // ---- Data model ----
-    const defaultState = { supplements: [], pinHash: null };
+    const defaultState = { supplements: [], purchases: [] };
     let state = structuredClone(defaultState);
 
     async function loadState() {
@@ -215,11 +208,9 @@
       const saved = await idbGet('state');
       state = saved ? saved : structuredClone(defaultState);
 
-      // One-time purge: remove any previous backup config (to erase tokens)
-      if (state.backup) {
-        delete state.backup;
-        await saveState();
-      }
+      // Limpieza de versiones viejas
+      if (state.backup) delete state.backup;
+      if (!Array.isArray(state.purchases)) state.purchases = [];
 
       render();
     }
@@ -227,20 +218,48 @@
 
     function uid() { return Math.random().toString(36).slice(2, 10); }
 
-    // ---- PIN (simple local hash) ----
-    function hash(str) {
-      let h = 0;
-      for (let i = 0; i < str.length; i++) { h = (h << 5) - h + str.charCodeAt(i); h |= 0; }
-      return String(h);
+    // ---- Spend helpers ----
+    function addPurchase(sup, cost, qty=1) {
+      if (!state.purchases) state.purchases = [];
+      state.purchases.push({
+        id: uid(),
+        supplementId: sup.id,
+        name: sup.name,
+        cost: Number(cost) || 0,
+        qty: Number(qty) || 1,
+        date: Date.now()
+      });
     }
 
-    function promptPINIfSet() {
-      const hasPIN = !!state.pinHash;
-      if (!hasPIN) return;
-      const input = prompt('Ingresa tu PIN para desbloquear');
-      if (hash(input || '') === state.pinHash) return;
-      alert('PIN incorrecto. La app seguirá bloqueada hasta que ingreses el PIN correcto (recarga para intentar de nuevo).');
-      document.querySelector('.container').innerHTML = '<div class="card danger">Bloqueado. Recarga la página e ingresa el PIN correcto.</div>';
+    function sumInLast(days) {
+      const now = Date.now();
+      const ms = days * 24*60*60*1000;
+      return (state.purchases||[])
+        .filter(p => now - p.date <= ms)
+        .reduce((a,p) => a + (p.cost||0), 0);
+    }
+
+    function avgPerDay() {
+      const p = (state.purchases||[]).slice().sort((a,b)=>a.date-b.date);
+      if (p.length === 0) return 0;
+      const total = p.reduce((a,x)=> a + (x.cost||0), 0);
+      const days = Math.max(1, (p[p.length-1].date - p[0].date) / (24*60*60*1000));
+      return total / days;
+    }
+
+    function formatMoney(n) {
+      try { return new Intl.NumberFormat(undefined, { style:'currency', currencyDisplay:'symbol', currency:'USD', maximumFractionDigits:2 }).format(n); }
+      catch { return (Math.round(n*100)/100).toString(); }
+    }
+
+    function updateMetrics() {
+      document.getElementById('spent7').textContent = formatMoney(sumInLast(7));
+      document.getElementById('spent30').textContent = formatMoney(sumInLast(30));
+      document.getElementById('spent365').textContent = formatMoney(sumInLast(365));
+      const perDay = avgPerDay();
+      document.getElementById('avgWeek').textContent = formatMoney(perDay * 7);
+      document.getElementById('avgMonth').textContent = formatMoney(perDay * 30);
+      document.getElementById('avgYear').textContent = formatMoney(perDay * 365);
     }
 
     // ---- UI helpers ----
@@ -283,6 +302,7 @@
       });
       if (!arr.length) {
         listEl.innerHTML = '<div class="card">Aún no tienes suplementos. Pulsa "Agregar suplemento".</div>';
+        updateMetrics();
         return;
       }
       arr.forEach(s => {
@@ -321,6 +341,7 @@
         `;
         listEl.appendChild(card);
       });
+      updateMetrics();
     }
 
     // ---- Toast utility ----
@@ -344,7 +365,16 @@
           }
         } else alert('No hay frascos en inventario.');
       }
-      if (act === 'addbottle') { sup.bottles = (sup.bottles||0) + 1; await saveState(); toastAction('+1 frasco'); }
+      if (act === 'addbottle') {
+        let val = prompt('¿Cuánto te costó el frasco? (usa la misma moneda)');
+        if (val === null) return; // cancelado
+        val = val.replace(',', '.').trim();
+        const cost = parseFloat(val);
+        if (Number.isNaN(cost) || cost < 0) { alert('Costo inválido. Intenta de nuevo.'); return; }
+        sup.bottles = (sup.bottles||0) + 1;
+        addPurchase(sup, cost, 1);
+        await saveState(); toastAction('+1 frasco (costo registrado)');
+      }
       if (act === 'subbottle') {
         if ((sup.bottles||0) > 0) { sup.bottles = (sup.bottles||0) - 1; await saveState(); toastAction('-1 frasco'); }
         else { alert('No puedes bajar de 0 frascos.'); }
@@ -442,7 +472,7 @@
         const parsed = JSON.parse(txt);
         if (!parsed || typeof parsed !== 'object' || !parsed.supplements) throw new Error('Formato inválido');
         state = parsed;
-        if (state.backup) delete state.backup; // seguridad: limpiar cualquier config previa
+        if (!Array.isArray(state.purchases)) state.purchases = []; // migración
         await saveState(); render(); showToast('Importado');
       } catch (err) { alert('No se pudo importar: ' + err.message); }
       finally { importFile.value = ''; }
@@ -461,38 +491,9 @@
       if (ok) urls.forEach(u => window.open(u, '_blank'));
     });
 
-    // ---- PIN modal ----
-    const pinModal = document.getElementById('pinModal');
-    document.getElementById('lockBtn').addEventListener('click', ()=> {
-      document.getElementById('pinState').textContent = state.pinHash ? 'PIN configurado.' : 'No hay PIN configurado.';
-      document.getElementById('pinInput').value = '';
-      pinModal.classList.add('show');
-    });
-    document.getElementById('pinCloseBtn')?.addEventListener('click', ()=> pinModal.classList.remove('show'));
-    pinModal?.addEventListener('click', (ev)=>{
-      const card = pinModal.querySelector('.modal-card'); if (!card) return;
-      if (!card.contains(ev.target)) pinModal.classList.remove('show');
-    });
-    document.addEventListener('keydown', (ev)=>{ if (pinModal.classList.contains('show') && ev.key==='Escape') pinModal.classList.remove('show'); });
-
-    document.getElementById('setPinBtn').addEventListener('click', async (e)=>{
-      e.preventDefault();
-      const val = document.getElementById('pinInput').value.trim();
-      if (!/^\d{4,8}$/.test(val)) { alert('El PIN debe tener 4 a 8 dígitos.'); return; }
-      state.pinHash = hash(val);
-      await saveState();
-      showToast('PIN guardado'); pinModal.classList.remove('show');
-    });
-    document.getElementById('clearPinBtn').addEventListener('click', async (e)=>{
-      e.preventDefault();
-      state.pinHash = null;
-      await saveState();
-      showToast('PIN eliminado'); pinModal.classList.remove('show');
-    });
-
     // ---- Init ----
+    document.getElementById('versionBadge').textContent = APP_VERSION;
     loadState().then(()=>{
-      promptPINIfSet();
       document.getElementById('search')?.focus();
     });
   </script>
