@@ -1,1 +1,0 @@
-PWA Suplementos — compatible con iOS Safari (modales sin <dialog>).
