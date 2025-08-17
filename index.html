@@ -1,24 +1,501 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Suplementos</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#ffffff">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <style>
+    :root { --pad: 12px; --radius: 12px; --bg:#f7f7fb; --card:#ffffff; --muted:#666; }
+    * { box-sizing: border-box; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+    body { margin: 0; background: var(--bg); color: #111; }
+    header { position: sticky; top: 0; background: var(--card); padding: 14px var(--pad); border-bottom: 1px solid #eee; display:flex; align-items:center; gap:8px; z-index:5; }
+    header h1 { font-size: 18px; margin: 0; flex:1; }
+    .container { padding: var(--pad); max-width: 900px; margin: 0 auto; }
+    .toolbar { display:flex; gap:8px; flex-wrap:wrap; }
+    button, input, select, textarea { font-size:16px; padding:10px 12px; border-radius:10px; border:1px solid #ddd; background:#fff; }
+    button.primary { background:#111; color:#fff; border-color:#111; }
+    .card { background: var(--card); border:1px solid #eee; border-radius: var(--radius); padding: var(--pad); margin: 10px 0; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; }
+    .row > * { flex:1; min-width: 160px; }
+    .muted { color: var(--muted); font-size: 12px; }
+    .pill { display:inline-block; padding:4px 8px; border-radius:999px; border:1px solid #eee; background:#fafafa; margin-right:6px; font-size:12px; }
+    .sup-row { display:flex; align-items:center; gap:10px; justify-content:space-between; }
+    .actions { display:flex; gap:8px; flex-wrap:wrap; }
+    .hidden { display:none; }
+    .footer-space { height: 24px; }
+    .ok { color: #0a7b27; }
+    .warn { color: #b36b00; }
+    .search { width:100%; }
+    .subtle { background:#fafafa; }
+
+    /* Modal (iOS-safe) */
+    .modal { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; z-index: 50; }
+    .modal.show { display: flex; }
+    .modal-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,.35); }
+    .modal-card { position: relative; background: #fff; border-radius: 16px; width: min(680px, 92vw); padding: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.25); border: 1px solid #eee; }
+    .modal-card h3 { margin: 0 0 8px 0; font-size: 18px; }
+    .modal-card menu { display: flex; gap: 8px; justify-content: flex-end; padding: 0; margin-top: 12px; }
+
+    .metrics { display:grid; grid-template-columns: repeat(auto-fit,minmax(180px,1fr)); gap:10px; }
+    .metric { background: var(--card); border:1px solid #eee; border-radius: 12px; padding:10px; }
+    .metric .label { font-size:12px; color:#666; }
+    .metric .value { font-weight:600; font-size:16px; }
+  </style>
 </head>
 <body>
   <header>
-    <h1>📦 Inventario de Suplementos</h1>
-    <span id="version">v1.4.1-noSW</span>
+    <h1>Suplementos</h1>
+    <button id="installBtn" class="hidden">➕ Instalar</button>
+    <button id="refreshBtn" title="Forzar actualización">🔄</button>
   </header>
-  <main>
-    <div id="metrics" class="card"></div>
-    <div id="list"></div>
-    <div class="actions">
-      <button onclick="exportState()">Exportar</button>
-      <input type="file" id="importFile" accept="application/json" onchange="importState(event)" />
+
+  <div class="container">
+    <div class="card subtle">
+      <div class="row">
+        <input id="search" class="search" placeholder="Buscar suplemento..." />
+      </div>
+      <div class="muted">Consejo: ábrela en Safari y “Agregar a pantalla de inicio” para usarla como app nativa. Usa la <b>misma moneda</b> al capturar costos.</div>
     </div>
-  </main>
-  <script src="script.js"></script>
+
+    <div class="toolbar">
+      <button class="primary" id="addSupplementBtn">➕ Agregar suplemento</button>
+      <button id="exportBtn">⬇️ Exportar</button>
+      <input type="file" id="importFile" accept=".json" class="hidden"/>
+      <button id="importBtn">⬆️ Importar</button>
+      <button id="checkAllBtn">🛒 Checar precios (abrir links)</button>
+    </div>
+
+    <div class="card">
+      <h3 style="margin:0 0 8px 0;font-size:16px;">Métricas de gasto</h3>
+      <div class="metrics">
+        <div class="metric"><div class="label">Gastado (7 días)</div><div class="value" id="spent7">—</div></div>
+        <div class="metric"><div class="label">Gastado (30 días)</div><div class="value" id="spent30">—</div></div>
+        <div class="metric"><div class="label">Gastado (365 días)</div><div class="value" id="spent365">—</div></div>
+        <div class="metric"><div class="label">Promedio / semana</div><div class="value" id="avgWeek">—</div></div>
+        <div class="metric"><div class="label">Promedio / mes</div><div class="value" id="avgMonth">—</div></div>
+        <div class="metric"><div class="label">Promedio / año</div><div class="value" id="avgYear">—</div></div>
+      </div>
+      <div class="muted">Los promedios se calculan con tu historial de compras (costo por frasco) desde que empezaste a registrar.</div>
+    </div>
+
+    <div id="supplementList"></div>
+    <div class="footer-space"></div>
+  </div>
+
+  <div id="toast" class="hidden" style="position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#111;color:#fff;padding:10px 14px;border-radius:999px;box-shadow:0 6px 20px rgba(0,0,0,.2);z-index:999;font-size:14px;">Hecho</div>
+
+  <div id="versionBadge" style="position:fixed;right:10px;bottom:10px;background:rgba(0,0,0,.65);color:#fff;padding:6px 10px;border-radius:999px;font-size:12px;z-index:1000;letter-spacing:.2px;">v1.4.0-noSW</div>
+
+  <!-- Modal: Add/Edit Supplement -->
+  <div id="supModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="dlgTitle">
+    <div class="modal-backdrop"></div>
+    <div class="modal-card">
+      <form id="supForm" novalidate>
+        <h3 id="dlgTitle">Suplemento</h3>
+        <div class="row">
+          <input id="f_name" placeholder="Nombre (p. ej. Omega-3) *" required />
+          <input id="f_unitsPerBottle" type="number" min="1" placeholder="Cápsulas por frasco *" inputmode="numeric" enterkeyhint="done" required />
+        </div>
+        <div class="row">
+          <input id="f_bottles" type="number" min="0" placeholder="Cantidad de frascos (enteros)" inputmode="numeric" enterkeyhint="done"/>
+          <input id="f_dosePerDay" type="number" step="0.01" min="0" placeholder="Dosis diaria (cápsulas)" inputmode="decimal" enterkeyhint="done"/>
+        </div>
+        <div class="card subtle">
+          <div class="muted">Días de la semana (opcional, para promediar dosis):</div>
+          <div class="row">
+            <label><input type="checkbox" class="dow" value="0" checked> Lun</label>
+            <label><input type="checkbox" class="dow" value="1" checked> Mar</label>
+            <label><input type="checkbox" class="dow" value="2" checked> Mié</label>
+            <label><input type="checkbox" class="dow" value="3" checked> Jue</label>
+            <label><input type="checkbox" class="dow" value="4" checked> Vie</label>
+            <label><input type="checkbox" class="dow" value="5"> Sáb</label>
+            <label><input type="checkbox" class="dow" value="6"> Dom</label>
+          </div>
+          <div class="muted">Si tomas 4 cápsulas Lun–Vie y 0 el fin de semana, marca solo Lun–Vie.</div>
+        </div>
+        <div class="row">
+          <input id="f_url_iherb" placeholder="URL iHerb" />
+          <input id="f_url_amz" placeholder="URL Amazon" />
+        </div>
+        <div class="row">
+          <input id="f_url_ml" placeholder="URL Mercado Libre" />
+          <input id="f_notes" placeholder="Notas (opcional)" />
+        </div>
+
+        <menu>
+          <button id="cancelBtn" type="button">Cancelar</button>
+          <button class="primary" value="save">Guardar</button>
+        </menu>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const APP_VERSION = 'v1.4.0-noSW';
+
+    // ---- Toast ----
+    const toastEl = document.getElementById('toast');
+    let toastTimer;
+    function showToast(msg) {
+      if (!toastEl) return;
+      toastEl.textContent = msg;
+      toastEl.classList.remove('hidden');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(()=> toastEl.classList.add('hidden'), 1500);
+    }
+
+    // ---- Force update (clear caches if any) ----
+    async function forceUpdate(){
+      try {
+        showToast('Actualizando...');
+        if ('serviceWorker' in navigator){
+          const regs = await navigator.serviceWorker.getRegistrations();
+          for (const r of regs){ await r.unregister(); }
+          const keys = await caches.keys();
+          for (const k of keys){ await caches.delete(k); }
+        }
+      } catch (e) { console.error(e); }
+      setTimeout(()=> location.reload(), 300);
+    }
+    document.getElementById('refreshBtn')?.addEventListener('click', ()=>{
+      const ok = confirm('Esto forzará la actualización de la app y borrará el caché (no tu inventario). ¿Continuar?');
+      if (ok) forceUpdate();
+    });
+
+    // ---- IndexedDB ----
+    const DB_NAME = 'supplements-db';
+    const DB_STORE = 'kv';
+    let db;
+    function idbOpen() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, 1);
+        req.onupgradeneeded = () => {
+          const d = req.result;
+          if (!d.objectStoreNames.contains(DB_STORE)) d.createObjectStore(DB_STORE);
+        };
+        req.onsuccess = () => { db = req.result; resolve(); };
+        req.onerror = () => reject(req.error);
+      });
+    }
+    function idbGet(key) {
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(DB_STORE, 'readonly');
+        const store = tx.objectStore(DB_STORE);
+        const req = store.get(key);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+    function idbSet(key, val) {
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(DB_STORE, 'readwrite');
+        const store = tx.objectStore(DB_STORE);
+        const req = store.put(val, key);
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    // ---- Data model ----
+    const defaultState = { supplements: [], purchases: [] };
+    let state = structuredClone(defaultState);
+
+    async function loadState() {
+      await idbOpen();
+      const saved = await idbGet('state');
+      state = saved ? saved : structuredClone(defaultState);
+
+      // Limpieza de versiones viejas
+      if (state.backup) delete state.backup;
+      if (!Array.isArray(state.purchases)) state.purchases = [];
+
+      render();
+    }
+    async function saveState() { await idbSet('state', state); }
+
+    function uid() { return Math.random().toString(36).slice(2, 10); }
+
+    // ---- Spend helpers ----
+    function addPurchase(sup, cost, qty=1) {
+      if (!state.purchases) state.purchases = [];
+      state.purchases.push({
+        id: uid(),
+        supplementId: sup.id,
+        name: sup.name,
+        cost: Number(cost) || 0,
+        qty: Number(qty) || 1,
+        date: Date.now()
+      });
+    }
+
+    function sumInLast(days) {
+      const now = Date.now();
+      const ms = days * 24*60*60*1000;
+      return (state.purchases||[])
+        .filter(p => now - p.date <= ms)
+        .reduce((a,p) => a + (p.cost||0), 0);
+    }
+
+    function avgPerDay() {
+      const p = (state.purchases||[]).slice().sort((a,b)=>a.date-b.date);
+      if (p.length === 0) return 0;
+      const total = p.reduce((a,x)=> a + (x.cost||0), 0);
+      const days = Math.max(1, (p[p.length-1].date - p[0].date) / (24*60*60*1000));
+      return total / days;
+    }
+
+    function formatMoney(n) {
+      try { return new Intl.NumberFormat(undefined, { style:'currency', currencyDisplay:'symbol', currency:'USD', maximumFractionDigits:2 }).format(n); }
+      catch { return (Math.round(n*100)/100).toString(); }
+    }
+
+    function updateMetrics() {
+      document.getElementById('spent7').textContent = formatMoney(sumInLast(7));
+      document.getElementById('spent30').textContent = formatMoney(sumInLast(30));
+      document.getElementById('spent365').textContent = formatMoney(sumInLast(365));
+      const perDay = avgPerDay();
+      document.getElementById('avgWeek').textContent = formatMoney(perDay * 7);
+      document.getElementById('avgMonth').textContent = formatMoney(perDay * 30);
+      document.getElementById('avgYear').textContent = formatMoney(perDay * 365);
+    }
+
+    // ---- UI helpers ----
+    const listEl = document.getElementById('supplementList');
+    const searchEl = document.getElementById('search');
+
+    function filteredSupplements() {
+      const q = (searchEl.value || '').toLowerCase();
+      return state.supplements.filter(s => s.name.toLowerCase().includes(q));
+    }
+
+    function avgDailyDose(sup) {
+      const days = sup.daysOfWeek?.length ? sup.daysOfWeek.length : 7;
+      const perCalendarDay = (sup.dosePerDay || 0) * (days / 7);
+      return perCalendarDay;
+    }
+
+    function totalUnits(sup) {
+      return (sup.unitsPerBottle || 0) * (sup.bottles || 0);
+    }
+
+    function daysLeft(sup) {
+      const dose = avgDailyDose(sup);
+      if (!dose) return Infinity;
+      const units = totalUnits(sup);
+      return Math.floor(units / dose);
+    }
+
+    function dowName(i) { return ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'][i]; }
+
+    function render() {
+      listEl.innerHTML = '';
+      let arr = filteredSupplements();
+      arr = arr.slice().sort((a,b)=>{
+        const da = daysLeft(a), db = daysLeft(b);
+        if (da === Infinity && db === Infinity) return 0;
+        if (da === Infinity) return 1;
+        if (db === Infinity) return -1;
+        return da - db;
+      });
+      if (!arr.length) {
+        listEl.innerHTML = '<div class="card">Aún no tienes suplementos. Pulsa "Agregar suplemento".</div>';
+        updateMetrics();
+        return;
+      }
+      arr.forEach(s => {
+        const dLeft = daysLeft(s);
+        const warnDays = 15;
+        const status = (dLeft === Infinity) ? '<span class="muted">Sin dosis definida</span>' :
+                       (dLeft <= warnDays ? '<span class="warn">⚠️ Quedan ~'+dLeft+' días</span>' :
+                        '<span class="ok">✔︎ ~'+dLeft+' días</span>');
+        const urls = [
+          s.url_iherb ? '<span class="pill">iHerb</span>' : '',
+          s.url_amz ? '<span class="pill">Amazon</span>' : '',
+          s.url_ml ? '<span class="pill">Mercado Libre</span>' : ''
+        ].join(' ');
+
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML = `
+          <div class="sup-row">
+            <div>
+              <div><strong>${s.name}</strong></div>
+              <div class="muted">${s.bottles||0} frascos · ${s.unitsPerBottle||0} caps/frasco · dosis ${s.dosePerDay||0}/día ${s.daysOfWeek?.length? '('+s.daysOfWeek.map(dowName).join(', ')+')' : ''}</div>
+              <div>${status}</div>
+              <div>${urls}</div>
+              ${s.notes ? `<div class="muted">🗒 ${s.notes}</div>`: ''}
+            </div>
+            <div class="actions">
+              <button data-act="finish" data-id="${s.id}">Terminé un frasco</button>
+              <button data-act="addbottle" data-id="${s.id}">+1 frasco</button>
+              <button data-act="subbottle" data-id="${s.id}">-1 frasco</button>
+              <button data-act="dup" data-id="${s.id}">Duplicar</button>
+              <button data-act="price" data-id="${s.id}">Checar precio</button>
+              <button data-act="edit" data-id="${s.id}">Editar</button>
+              <button class="danger" data-act="delete" data-id="${s.id}">Eliminar</button>
+            </div>
+          </div>
+        `;
+        listEl.appendChild(card);
+      });
+      updateMetrics();
+    }
+
+    // ---- Toast utility ----
+    function toastAction(msg) { render(); showToast(msg); }
+
+    // ---- Events ----
+    searchEl.addEventListener('input', render);
+
+    listEl.addEventListener('click', async (e) => {
+      const btn = e.target.closest('button'); if (!btn) return;
+      const id = btn.getAttribute('data-id');
+      const sup = state.supplements.find(x => x.id === id);
+      if (!sup) return;
+
+      const act = btn.getAttribute('data-act');
+      if (act === 'finish') {
+        if ((sup.bottles||0) > 0) {
+          if (confirm('¿Seguro que terminaste un frasco de '+sup.name+'?')) {
+            sup.bottles = (sup.bottles||0) - 1;
+            await saveState(); toastAction('Se descontó 1 frasco');
+          }
+        } else alert('No hay frascos en inventario.');
+      }
+      if (act === 'addbottle') {
+        let val = prompt('¿Cuánto te costó el frasco? (usa la misma moneda)');
+        if (val === null) return; // cancelado
+        val = val.replace(',', '.').trim();
+        const cost = parseFloat(val);
+        if (Number.isNaN(cost) || cost < 0) { alert('Costo inválido. Intenta de nuevo.'); return; }
+        sup.bottles = (sup.bottles||0) + 1;
+        addPurchase(sup, cost, 1);
+        await saveState(); toastAction('+1 frasco (costo registrado)');
+      }
+      if (act === 'subbottle') {
+        if ((sup.bottles||0) > 0) { sup.bottles = (sup.bottles||0) - 1; await saveState(); toastAction('-1 frasco'); }
+        else { alert('No puedes bajar de 0 frascos.'); }
+      }
+      if (act === 'dup') {
+        const copy = JSON.parse(JSON.stringify(sup));
+        copy.id = uid(); copy.name = sup.name + ' (copia)'; copy.createdAt = Date.now(); copy.updatedAt = Date.now();
+        state.supplements.push(copy); await saveState(); toastAction('Duplicado');
+      }
+      if (act === 'price') {
+        const urls = [sup.url_iherb, sup.url_amz, sup.url_ml].filter(Boolean);
+        if (!urls.length) { alert('No hay URLs guardadas. Edita el suplemento y agrega al menos una URL.'); return; }
+        urls.forEach(u => window.open(u, '_blank'));
+      }
+      if (act === 'edit') openSupDialog(sup);
+      if (act === 'delete') {
+        if (confirm('¿Eliminar '+sup.name+'?')) { state.supplements = state.supplements.filter(x => x.id !== id); await saveState(); toastAction('Eliminado'); }
+      }
+    });
+
+    // ---- Add/Edit modal ----
+    const supModal = document.getElementById('supModal');
+    const form = document.getElementById('supForm');
+    let editingId = null;
+
+    document.getElementById('addSupplementBtn').addEventListener('click', () => openSupDialog());
+
+    function openSupDialog(sup=null) {
+      editingId = sup?.id || null;
+      document.getElementById('dlgTitle').textContent = editingId ? 'Editar suplemento' : 'Agregar suplemento';
+
+      document.getElementById('f_name').value = sup?.name || '';
+      document.getElementById('f_unitsPerBottle').value = sup?.unitsPerBottle || '';
+      document.getElementById('f_bottles').value = sup?.bottles ?? '';
+      document.getElementById('f_dosePerDay').value = sup?.dosePerDay ?? '';
+      document.querySelectorAll('.dow').forEach(cb => { cb.checked = sup?.daysOfWeek?.includes(Number(cb.value)) ?? (Number(cb.value) < 5); });
+      document.getElementById('f_url_iherb').value = sup?.url_iherb || '';
+      document.getElementById('f_url_amz').value = sup?.url_amz || '';
+      document.getElementById('f_url_ml').value = sup?.url_ml || '';
+      document.getElementById('f_notes').value = sup?.notes || '';
+
+      supModal.classList.add('show');
+      setTimeout(()=> document.getElementById('f_name')?.focus(), 0);
+    }
+
+    document.getElementById('cancelBtn')?.addEventListener('click', ()=> supModal.classList.remove('show'));
+    supModal?.addEventListener('click', (ev)=>{
+      const card = supModal.querySelector('.modal-card'); if (!card) return;
+      if (!card.contains(ev.target)) supModal.classList.remove('show');
+    });
+    document.addEventListener('keydown', (ev)=>{ if (supModal.classList.contains('show') && ev.key==='Escape') supModal.classList.remove('show'); });
+
+    form.addEventListener('submit', async (e) => {
+      const isSave = e.submitter?.value === 'save' || (e.submitter && e.submitter.textContent.includes('Guardar'));
+      if (!isSave) { return; }
+      e.preventDefault();
+
+      const sup = {
+        id: editingId || uid(),
+        name: document.getElementById('f_name').value.trim(),
+        unitsPerBottle: Number(document.getElementById('f_unitsPerBottle').value),
+        bottles: Number(document.getElementById('f_bottles').value || 0),
+        dosePerDay: Number(document.getElementById('f_dosePerDay').value || 0),
+        daysOfWeek: Array.from(document.querySelectorAll('.dow:checked')).map(cb => Number(cb.value)),
+        url_iherb: document.getElementById('f_url_iherb').value.trim(),
+        url_amz: document.getElementById('f_url_amz').value.trim(),
+        url_ml: document.getElementById('f_url_ml').value.trim(),
+        notes: document.getElementById('f_notes').value.trim(),
+        createdAt: editingId ? (state.supplements.find(x=>x.id===editingId)?.createdAt) : Date.now(),
+        updatedAt: Date.now()
+      };
+
+      if (!sup.name || !sup.unitsPerBottle) { alert('Nombre y cápsulas por frasco son obligatorios.'); return; }
+      if (editingId) { const idx = state.supplements.findIndex(x => x.id === editingId); state.supplements[idx] = sup; }
+      else { state.supplements.push(sup); }
+      await saveState();
+      supModal.classList.remove('show');
+      render();
+      showToast('Guardado');
+    });
+
+    // ---- Import/Export ----
+    document.getElementById('exportBtn').addEventListener('click', async () => {
+      const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(state, null, 2));
+      const a = document.createElement('a'); a.href = dataStr; a.download = 'supplements-backup.json'; a.click();
+      showToast('Exportado');
+    });
+
+    const importFile = document.getElementById('importFile');
+    document.getElementById('importBtn').addEventListener('click', ()=> importFile.click());
+    importFile.addEventListener('change', async (e) => {
+      const file = e.target.files[0]; if (!file) return;
+      try {
+        const txt = await file.text();
+        const parsed = JSON.parse(txt);
+        if (!parsed || typeof parsed !== 'object' || !parsed.supplements) throw new Error('Formato inválido');
+        state = parsed;
+        if (!Array.isArray(state.purchases)) state.purchases = []; // migración
+        await saveState(); render(); showToast('Importado');
+      } catch (err) { alert('No se pudo importar: ' + err.message); }
+      finally { importFile.value = ''; }
+    });
+
+    // ---- Checar todos los precios ----
+    document.getElementById('checkAllBtn').addEventListener('click', () => {
+      const urls = [];
+      state.supplements.forEach(s => {
+        if (s.url_iherb) urls.push(s.url_iherb);
+        if (s.url_amz) urls.push(s.url_amz);
+        if (s.url_ml) urls.push(s.url_ml);
+      });
+      if (!urls.length) { alert('No hay URLs guardadas en tus suplementos.'); return; }
+      const ok = confirm('Se abrirán '+urls.length+' pestañas (iHerb/Amazon/ML). ¿Continuar?');
+      if (ok) urls.forEach(u => window.open(u, '_blank'));
+    });
+
+    // ---- Init ----
+    document.getElementById('versionBadge').textContent = APP_VERSION;
+    loadState().then(()=>{
+      document.getElementById('search')?.focus();
+    });
+  </script>
 </body>
 </html>
